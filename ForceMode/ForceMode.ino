@@ -49,6 +49,10 @@ int16_t scale;
 #define LED_PIN 4
 
 // int successfulInits = 0; // Licznik poprawnych inicjalizacji
+bool uvInit = true;
+bool bmeInit = true;
+
+bool bmeWorking = true;
 
 //function headers 
 template <typename T>
@@ -193,6 +197,8 @@ void setup(void)
 		if (bme.checkStatus() == BME68X_ERROR)
 		{
 			Serial.println("Sensor error:" + bme.statusString());
+      bmeInit = false;
+      bmeWorking = false;
 			return;
 		}
 		else if (bme.checkStatus() == BME68X_WARNING)
@@ -261,6 +267,7 @@ void setup(void)
   //UV setup
   if(ltr390.begin() != 0){
     Serial.println(" Sensor initialize failed!!");
+    uvInit = false;
     delay(100);
   }else{
     Serial.println(" Sensor  initialize success!!");
@@ -275,7 +282,19 @@ void setup(void)
 
   }
 
-  appendFile(SD, logFileName, "status ,temp, press, hum, gasRes, ACC xy, ACC z, Vib, UV\n");
+  if(uvInit){
+    if(bmeInit){
+      appendFile(SD, logFileName, "env_status ,temp, press, hum, gasRes, ACC xy, ACC z, Vib, UV\n");
+    }else{
+      appendFile(SD, logFileName, "ACC xy, ACC z, Vib, UV\n");
+    }
+  }else{
+    if(bmeInit){
+      appendFile(SD, logFileName, "env_status ,temp, press, hum, gasRes, ACC xy, ACC z, Vib\n");
+    }else{
+      appendFile(SD, logFileName, "ACC xy, ACC z, Vib\n");
+    }
+  }
 }
 
 void loop(void)
@@ -302,11 +321,30 @@ void loop(void)
   //  Serial.print(fromADXL_ptr[2] * 0.031);
   //  Serial.print("\n");
 
+
+  if(!bmeWorking){
+    	/* Set the default configuration for temperature, pressure and humidity */
+	  bme.setTPH();
+
+	  /* Set the heater configuration to 300 deg C for 100ms for Forced mode */
+	  bme.setHeaterProf(300, 100);
+
+    bme.setOpMode(BME68X_FORCED_MODE);
+	  delay(500+bme.getMeasDur()/200);
+
+    if(bme.fetchData()){
+      digitalWrite(LED_PIN, HIGH);
+      delay(500);
+      digitalWrite(LED_PIN, LOW);
+      delay(500);
+    }
+  }
+
   //fetch BME688 data
 	bme68xData data;
 
 	bme.setOpMode(BME68X_FORCED_MODE);
-	delay(500+bme.getMeasDur()/200);
+	delay(200+bme.getMeasDur()/200);
 
 	if (bme.fetchData())
 	{
@@ -327,7 +365,26 @@ void loop(void)
     appendFile(SD, logFileName, data.humidity);
     appendFile(SD, logFileName, ", ");
     appendFile(SD, logFileName, data.gas_resistance);
-	}
+    bmeWorking = true;
+	}else{
+    Serial.print("E");
+		Serial.print("E, ");
+    Serial.print("E, ");		
+    Serial.print("E, ");		
+    Serial.print("E, ");
+
+    appendFile(SD, logFileName, "404");
+    appendFile(SD, logFileName, ", ");
+    appendFile(SD, logFileName, "404");
+    appendFile(SD, logFileName, ", ");
+    appendFile(SD, logFileName, "404");
+    appendFile(SD, logFileName, ", ");
+    appendFile(SD, logFileName, "404");
+    appendFile(SD, logFileName, ", ");
+    appendFile(SD, logFileName, "404");
+
+    bmeWorking = false;
+  }
 
     //ADXL356C
   // int16_t val_xy = analogRead(XY_PIN);
@@ -364,15 +421,17 @@ void loop(void)
 
   //UV
 
-  uint32_t data_uv = 0;
-  data_uv= ltr390.readOriginalData();//Get UV raw data
-  int uv_index = mapUVIndex(data_uv);
-  SERIAL.println(", ");
-  Serial.println(data_uv);
-  char uv_buffer[32];
-  sprintf(uv_buffer, ", %d", uv_index);
-  appendFile(SD, logFileName, uv_buffer);
-  appendFile(SD, logFileName, "\n");
+  if(uvInit){
+    uint32_t data_uv = 0;
+    data_uv= ltr390.readOriginalData();//Get UV raw data
+    int uv_index = mapUVIndex(data_uv);
+    SERIAL.println(", ");
+    Serial.println(data_uv);
+    char uv_buffer[32];
+    sprintf(uv_buffer, ", %d", uv_index);
+    appendFile(SD, logFileName, uv_buffer);
+    appendFile(SD, logFileName, "\n");
+  }
 
   
 }
