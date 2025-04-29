@@ -24,10 +24,9 @@ DFRobot_LTR390UV ltr390(/*addr = */LTR390UV_DEVICE_ADDR, /*pWire = */&Wire);
 
 #define ADD_I2C 0x77
 // #define ADXL 0x53 //accelerometer, 83 in DEC, alt. 0x1C, 0x53
-// #define MCP 0x18 //termometr wewnątrz modułu
 
 //ADXL356C
-#define SERIAL Serial
+// #define SERIAL Serial
 #define SYS_VOL 3.3
 
 #define MODULE_RANGE 20
@@ -60,11 +59,11 @@ void appendFile(fs::FS &fs, const char * path, T message){
 
   File file = fs.open(path, FILE_APPEND);
   if(!file){
-    Serial.println("Failed to open file for appending");
+    // Serial.println("Failed to open file for appending");
     return;
   }
   if(!file.print(message)){
-    Serial.println("Append failed");
+    // Serial.println("Append failed");
   }
   file.close();
 }
@@ -113,9 +112,9 @@ float deal_cali_buf(float *buf){
 
 void calibration(void){
 
-  SERIAL.println("Please Place the module horizontally!");
+  // SERIAL.println("Please Place the module horizontally!");
   delay(200);
-  SERIAL.println("Calibration....");
+  // SERIAL.println("Calibration....");
 
   for(int i = 0; i < CALI_BUF_LEN; i++){
 
@@ -128,7 +127,7 @@ void calibration(void){
   cali_data_xy = deal_cali_buf(cali_buf_xy);
   cali_data_z = deal_cali_buf(cali_buf_z);
 
-  SERIAL.println("Calibration OK!!!");
+  // SERIAL.println("Calibration OK!!!");
 
   digitalWrite(LED_PIN, HIGH);
   delay(500);
@@ -155,9 +154,6 @@ void calibration(void){
 
 // int16_t * readADXL(int8_t * accelertations_raw);
 void writeFile(fs::FS &fs, const char * path, const char * message);
-void testFileIO(fs::FS &fs, const char * path);
-void createDir(fs::FS &fs, const char * path);
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels);
 
 //global variables
 char logFileName[32];
@@ -178,16 +174,16 @@ float UVindex; //przeliczony indeks UV
  */
 void setup(void)
 {
-  Serial.begin(115200);
+  // Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
 
   Wire.begin();     //I2C mode
-	Serial.begin(115200);
+	// Serial.begin(115200);
 	
-	while (!Serial)
-		delay(10);
+	// while (!Serial)
+	// 	delay(10);
 
   //BME688 setup
   bme.begin(ADD_I2C, Wire);     //I2C mode
@@ -203,7 +199,7 @@ void setup(void)
 		}
 		else if (bme.checkStatus() == BME68X_WARNING)
 		{
-			Serial.println("Sensor Warning:" + bme.statusString());
+			// Serial.println("Sensor Warning:" + bme.statusString());
 		}
 	}
 	
@@ -225,7 +221,7 @@ void setup(void)
 
   //SD setup
 	if(!SD.begin(5)){
-    Serial.println("Card Mount Failed");
+    // Serial.println("Card Mount Failed");
     return;
   }else{
     digitalWrite(LED_PIN, HIGH);
@@ -236,9 +232,9 @@ void setup(void)
   int fileCount = countFiles(SD, "/");
 
   // Utwórz nazwę nowego pliku
-  sprintf(logFileName, "/stratos_%d.txt", fileCount);
-  Serial.print("Nowy plik logu: ");
-  Serial.println(logFileName);
+  sprintf(logFileName, "/balon_%d.txt", fileCount);
+  // Serial.print("Nowy plik logu: ");
+  // Serial.println(logFileName);
 
 
   writeFile(SD, logFileName, "Start Log");
@@ -248,8 +244,8 @@ void setup(void)
   analogReadResolution(12);
   calibration();
   delay(1700);
-  SERIAL.print("Scale = ");
-  SERIAL.println(scale);
+  // SERIAL.print("Scale = ");
+  // SERIAL.println(scale);
 
   // //ADXL setup
   // Serial.print("SETUP");
@@ -266,11 +262,11 @@ void setup(void)
 
   //UV setup
   if(ltr390.begin() != 0){
-    Serial.println(" Sensor initialize failed!!");
+    // Serial.println(" Sensor initialize failed!!");
     uvInit = false;
     delay(100);
   }else{
-    Serial.println(" Sensor  initialize success!!");
+    // Serial.println(" Sensor  initialize success!!");
     ltr390.setALSOrUVSMeasRate(ltr390.e18bit,ltr390.e100ms);//18-bit data, sampling time of 100ms 
     ltr390.setALSOrUVSGain(ltr390.eGain3);//Gain of 3
     ltr390.setMode(ltr390.eUVSMode);//Set UV mode 
@@ -344,17 +340,17 @@ void loop(void)
 	bme68xData data;
 
 	bme.setOpMode(BME68X_FORCED_MODE);
-	delay(200+bme.getMeasDur()/200);
+	delay(350+bme.getMeasDur()/200);
 
 	if (bme.fetchData())
 	{
 		bme.getData(data);
 		// Serial.print(String(millis()) + ", ");
-    Serial.println(data.status, HEX);
-		Serial.print(String(data.temperature) + ", ");
-		Serial.print(String(data.pressure) + ", ");
-		Serial.print(String(data.humidity) + ", ");
-		Serial.print(String(data.gas_resistance) + ", ");
+    // Serial.println(data.status, HEX);
+		// Serial.print(String(data.temperature) + ", ");
+		// Serial.print(String(data.pressure) + ", ");
+		// Serial.print(String(data.humidity) + ", ");
+		// Serial.print(String(data.gas_resistance) + ", ");
 
     appendFile(SD, logFileName, data.status);
     appendFile(SD, logFileName, ", ");
@@ -367,11 +363,11 @@ void loop(void)
     appendFile(SD, logFileName, data.gas_resistance);
     bmeWorking = true;
 	}else{
-    Serial.print("E");
-		Serial.print("E, ");
-    Serial.print("E, ");		
-    Serial.print("E, ");		
-    Serial.print("E, ");
+    // Serial.print("E");
+		// Serial.print("E, ");
+    // Serial.print("E, ");		
+    // Serial.print("E, ");		
+    // Serial.print("E, ");
 
     appendFile(SD, logFileName, "404");
     appendFile(SD, logFileName, ", ");
@@ -398,10 +394,10 @@ void loop(void)
   val_xy -= cali_data_xy;
   val_z -= cali_data_z;
   
-  SERIAL.print(",x/y: ");
-  SERIAL.print(val_xy* scale / 1000.0);
-  SERIAL.print(", z: ");
-  SERIAL.print(val_z * scale / 1000.0);
+  // SERIAL.print(",x/y: ");
+  // SERIAL.print(val_xy* scale / 1000.0);
+  // SERIAL.print(", z: ");
+  // SERIAL.print(val_z * scale / 1000.0);
 
   char acc_buffer[32];
 
@@ -412,8 +408,8 @@ void loop(void)
 
   //Piezo
   int vib = analogRead(piezoPin);
-  SERIAL.println(", ");
-  SERIAL.println(vib);
+  // SERIAL.println(", ");
+  // SERIAL.println(vib);
   char vib_buffer[32];
   sprintf(vib_buffer, ",%d",vib);
   appendFile(SD, logFileName, vib_buffer);
@@ -425,10 +421,10 @@ void loop(void)
     uint32_t data_uv = 0;
     data_uv= ltr390.readOriginalData();//Get UV raw data
     int uv_index = mapUVIndex(data_uv);
-    SERIAL.println(", ");
-    Serial.println(data_uv);
+    // SERIAL.println(", ");
+    // Serial.println(data_uv);
     char uv_buffer[32];
-    sprintf(uv_buffer, ", %d", uv_index);
+    sprintf(uv_buffer, ", %d", data_uv);
     appendFile(SD, logFileName, uv_buffer);
     appendFile(SD, logFileName, "\n");
   }
@@ -469,102 +465,18 @@ void loop(void)
 
 
 void writeFile(fs::FS &fs, const char * path, const char * message){
-  Serial.printf("Writing file: %s\n", path);
+  // Serial.printf("Writing file: %s\n", path);
 
   File file = fs.open(path, FILE_WRITE);
   if(!file){
-    Serial.println("Failed to open file for writing");
+    // Serial.println("Failed to open file for writing");
     return;
   }
   if(file.print(message)){
-    Serial.println("File written");
+    // Serial.println("File written");
   } else {
-    Serial.println("Write failed");
+    // Serial.println("Write failed");
   }
   file.close();
-}
-
-
-void testFileIO(fs::FS &fs, const char * path){
-  File file = fs.open(path);
-  static uint8_t buf[512];
-  size_t len = 0;
-  uint32_t start = millis();
-  uint32_t end = start;
-  if(file){
-    len = file.size();
-    size_t flen = len;
-    start = millis();
-    while(len){
-      size_t toRead = len;
-      if(toRead > 512){
-        toRead = 512;
-      }
-      file.read(buf, toRead);
-      len -= toRead;
-    }
-    end = millis() - start;
-    Serial.printf("%u bytes read for %u ms\n", flen, end);
-    file.close();
-  } else {
-    Serial.println("Failed to open file for reading");
-  }
-
-
-  file = fs.open(path, FILE_WRITE);
-  if(!file){
-    Serial.println("Failed to open file for writing");
-    return;
-  }
-
-  size_t i;
-  start = millis();
-  for(i=0; i<2048; i++){
-    file.write(buf, 512);
-  }
-  end = millis() - start;
-  Serial.printf("%u bytes written for %u ms\n", 2048 * 512, end);
-  file.close();
-}
-
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
-  Serial.printf("Listing directory: %s\n", dirname);
-
-  File root = fs.open(dirname);
-  if(!root){
-    Serial.println("Failed to open directory");
-    return;
-  }
-  if(!root.isDirectory()){
-    Serial.println("Not a directory");
-    return;
-  }
-
-  File file = root.openNextFile();
-  while(file){
-    if(file.isDirectory()){
-      Serial.print("  DIR : ");
-      Serial.println(file.name());
-      if(levels){
-        listDir(fs, file.name(), levels -1);
-      }
-    } else {
-      Serial.print("  FILE: ");
-      Serial.print(file.name());
-      Serial.print("  SIZE: ");
-      Serial.println(file.size());
-    }
-    file = root.openNextFile();
-  }
-}
-
-
-void createDir(fs::FS &fs, const char * path){
-  Serial.printf("Creating Dir: %s\n", path);
-  if(fs.mkdir(path)){
-    Serial.println("Dir created");
-  } else {
-    Serial.println("mkdir failed");
-  }
 }
 
