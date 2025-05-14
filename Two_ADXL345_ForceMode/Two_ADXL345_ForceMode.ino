@@ -1,96 +1,89 @@
-#include "Arduino.h"
 #include <Wire.h>
 
-#define ADXL1 0x53
-#define ADXL2 0x1D
+TwoWire I2C_ADXL2 = TwoWire(1);
 
-int8_t accelerations_1_raw[6]; //przyspieszenia x, y, z
-int8_t accelerations_2_raw[6]; //przyspieszenia x, y, z
+#define ADXL1_ADDR 0x1D  // Czujnik 1 na Wire
+#define ADXL2_ADDR 0x53  // Czujnik 2 na Wire1
 
+int8_t acc1_raw[6];
+int8_t acc2_raw[6];
 
-template <typename T>
-int16_t * readADXL(uint8_t address, int8_t * accelertations_raw);
+bool isFirst = true;
 
-void setup(void) {
-  // put your setup code here, to run once:
+void setupADXL(TwoWire &bus, uint8_t address) {
+  bus.beginTransmission(address);
+  bus.write(0x2D);  // Power Control
+  bus.write(0x08);  // Measurement mode
+  bus.endTransmission();
 
-  Wire.begin();     //I2C mode
-	Serial.begin(115200);
-
-    //ADXL1 setup
-  Serial.print("SETUP");
-  Wire.beginTransmission(ADXL1);
-  Wire.write(0x32); //rejestr zakresu danych
-  Wire.write(0x0B); //+- 16g, powinno wystarczyć
-  Wire.endTransmission();
-
-  Wire.beginTransmission(ADXL1);
-  Wire.write(0x2D); //Power ctl
-  Wire.write(0x08); //Tryb pomiaru ciągłego
-  Wire.endTransmission();
-
-      //ADXL2 setup
-  Serial.print("SETUP");
-  Wire.beginTransmission(ADXL2);
-  Wire.write(0x32); //rejestr zakresu danych
-  Wire.write(0x0B); //+- 16g, powinno wystarczyć
-  Wire.endTransmission();
-
-  Wire.beginTransmission(ADXL2);
-  Wire.write(0x2D); //Power ctl
-  Wire.write(0x08); //Tryb pomiaru ciągłego
-  Wire.endTransmission();
+  bus.beginTransmission(address);
+  bus.write(0x31);  // Data format
+  bus.write(0x0B);  // +-16g
+  bus.endTransmission();
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
-
-    //fetch ADXL data
-  int16_t * fromADXL1_ptr;
-  int16_t * fromADXL2_ptr;
-
-  fromADXL1_ptr = readADXL(ADXL1, accelerations_1_raw);
-  fromADXL2_ptr = readADXL(ADXL2, accelerations_2_raw);
-
-    Serial.print("Acceleration (x, y, z): ");
-   Serial.print( "Xraw = ");
-   Serial.print(fromADXL1_ptr[0] * 0.031);
-   Serial.print( "Yraw = ");
-   Serial.print(fromADXL1_ptr[1] * 0.031);
-   Serial.print( "Zraw = ");
-   Serial.print(fromADXL1_ptr[2] * 0.031);
-    Serial.print( "Xraw = ");
-   Serial.print(fromADXL2_ptr[0] * 0.031);
-   Serial.print( "Yraw = ");
-   Serial.print(fromADXL2_ptr[1] * 0.031);
-   Serial.print( "Zraw = ");
-   Serial.println(fromADXL2_ptr[2] * 0.031);
-
-   delay(50);
-
-}
-
-int16_t *readADXL(uint8_t address, int8_t *accel_raw) {
+int16_t* readADXL(TwoWire &bus, uint8_t address, int8_t* raw_data) {
   static int16_t acc[3];
 
-  Wire.beginTransmission(address);
-  Wire.write(0x32); // ADXL register start
-  if (Wire.endTransmission() == 0) {
-    Wire.requestFrom(address, (uint8_t)6);
+  bus.beginTransmission(address);
+  bus.write(0x32);  // Data register
+  if (bus.endTransmission(false) == 0) {
+    bus.requestFrom(address, (uint8_t)6);
     for (int i = 0; i < 6; i++) {
-      accel_raw[i] = Wire.read();
+      raw_data[i] = bus.read();
     }
 
-    acc[0] = accel_raw[0] | (accel_raw[1] << 8);
-    acc[1] = accel_raw[2] | (accel_raw[3] << 8);
-    acc[2] = accel_raw[4] | (accel_raw[5] << 8);
+    acc[0] = (int16_t)(raw_data[1] << 8 | raw_data[0]);
+    acc[1] = (int16_t)(raw_data[3] << 8 | raw_data[2]);
+    acc[2] = (int16_t)(raw_data[5] << 8 | raw_data[4]);
   } else {
-    Serial.print("ADXL at 0x");
-    Serial.print(address, HEX);
-    Serial.println(" not responding!");
     acc[0] = acc[1] = acc[2] = 0;
   }
 
   return acc;
 }
 
+void setup() {
+  Serial.begin(115200);
+
+  // Czujnik 1
+  Wire.begin(21, 22);      // GPIO21 = SDA, GPIO22 = SCL
+  setupADXL(Wire, ADXL1_ADDR);
+
+  // Czujnik 2
+  I2C_ADXL2.begin(17, 16); // GPIO17 = SDA, GPIO16 = SCL
+  setupADXL(I2C_ADXL2, ADXL2_ADDR);
+}
+
+void loop() {
+  if(isFirst){
+    int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
+    delay(50);
+    // int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
+
+    Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
+    Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
+    Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
+
+    // Serial.print("[ADXL2 - 0x53] X="); Serial.print(acc2[0] * 0.0039);
+    // Serial.print(" Y="); Serial.print(acc2[1] * 0.0039);
+    // Serial.print(" Z="); Serial.println(acc2[2] * 0.0039);
+
+    Serial.println("-----------------------------");
+  }else{
+      // int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
+    delay(50);
+    int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
+
+    // Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
+    // Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
+    // Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
+
+    Serial.print("[ADXL2 - 0x53] X="); Serial.print(acc2[0] * 0.0039);
+    Serial.print(" Y="); Serial.print(acc2[1] * 0.0039);
+    Serial.print(" Z="); Serial.println(acc2[2] * 0.0039);
+
+    Serial.println("-----------------------------");
+  }
+  isFirst = !isFirst;
+}
