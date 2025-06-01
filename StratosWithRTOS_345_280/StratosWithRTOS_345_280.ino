@@ -7,6 +7,8 @@
 #include <numeric>
 #include <iostream>
 #include <BME280I2C.h>
+#include "RTClib.h"
+
 
 
 
@@ -52,6 +54,19 @@ struct EnvData {
 
 
 EnvData envData;
+
+RTC_DS3231 rtc
+
+TwoWire I2C_ADXL2 = TwoWire(1);
+
+
+#define ADXL1_ADDR 0x1D  // Sensor 1 on Wire
+#define ADXL2_ADDR 0x53  // Sensor 2 on Wire1
+
+int8_t acc1_raw[6];
+int8_t acc2_raw[6];
+
+bool isFirst = true;
 
 //Logging global variables
 File logFile;
@@ -153,6 +168,39 @@ void calibration(void){
 
 }
 
+//ADXL345
+void setupADXL(TwoWire &bus, uint8_t address) {
+  bus.beginTransmission(address);
+  bus.write(0x2D);  // Power Control
+  bus.write(0x08);  // Measurement mode
+  bus.endTransmission();
+
+  bus.beginTransmission(address);
+  bus.write(0x31);  // Data format
+  bus.write(0x0B);  // +-16g
+  bus.endTransmission();
+}
+
+int16_t* readADXL(TwoWire &bus, uint8_t address, int8_t* raw_data) {
+  static int16_t acc[3];
+
+  bus.beginTransmission(address);
+  bus.write(0x32);  // Data register
+  if (bus.endTransmission(false) == 0) {
+    bus.requestFrom(address, (uint8_t)6);
+    for (int i = 0; i < 6; i++) {
+      raw_data[i] = bus.read();
+    }
+
+    acc[0] = (int16_t)(raw_data[1] << 8 | raw_data[0]);
+    acc[1] = (int16_t)(raw_data[3] << 8 | raw_data[2]);
+    acc[2] = (int16_t)(raw_data[5] << 8 | raw_data[4]);
+  } else {
+    acc[0] = acc[1] = acc[2] = 0;
+  }
+
+  r
+
 void writeFile(fs::FS &fs, const char * path, const char * message);
 
 //BME280
@@ -186,6 +234,13 @@ void envTask(void *pvParameters){
 void motionTask(void *pvParameters){
   while(1){
 
+  DataTime now = rtc.now();
+
+  char timestamp[32];
+
+  sprintf(timestamp, "d%/%d/%d %d:%d:%d,",now.year(),now.month(),now.day(),now.hour(),now.minute(),now.second());
+  appendFile(SD, logFileName, timestamp);
+
   if(xSemaphoreTake(dataMutex, portMAX_DELAY)){
 
     appendFile(SD, logFileName, envData.temp);
@@ -218,23 +273,62 @@ void motionTask(void *pvParameters){
 
 
   //ADXL345
-  int16_t * fromADXL_ptr;
+  // int16_t * fromADXL_ptr;
 
-  fromADXL_ptr = readADXL(accelerations_raw);
-  Serial.print(", ");
-  Serial.print(fromADXL_ptr[0] * 0.031);
-  Serial.print(", ");
-  Serial.print(fromADXL_ptr[1] * 0.031);
-  Serial.print(", ");
-  Serial.print(fromADXL_ptr[2] * 0.031);
+  // fromADXL_ptr = readADXL(accelerations_raw);
+  // Serial.print(", ");
+  // Serial.print(fromADXL_ptr[0] * 0.031);
+  // Serial.print(", ");
+  // Serial.print(fromADXL_ptr[1] * 0.031);
+  // Serial.print(", ");
+  // Serial.print(fromADXL_ptr[2] * 0.031);
 
-  float x_g = fromADXL_ptr[0] * 0.0031;
-  float y_g = fromADXL_ptr[1] * 0.0031;
-  float z_g = fromADXL_ptr[2] * 0.0031;
+  // float x_g = fromADXL_ptr[0] * 0.0031;
+  // float y_g = fromADXL_ptr[1] * 0.0031;
+  // float z_g = fromADXL_ptr[2] * 0.0031;
 
-  char adxl_345_buffer[32];
-  sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
-  appendFile(SD, logFileName, adxl_345_buffer);
+  // char adxl_345_buffer[32];
+  // sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
+  // appendFile(SD, logFileName, adxl_345_buffer);
+
+    if(isFirst){
+      int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
+      // int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
+
+      // Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
+      // Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
+      // Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
+
+      float x_g = acc1[0] * 0.0039;
+      float y_g = acc1[1] * 0.0039;
+      float z_g = acc1[2] * 0.0039;
+
+      char adxl_345_buffer[32];
+      sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
+      appendFile(SD, logFileName, adxl_345_buffer);
+    }else{
+        // int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
+      int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
+
+      // Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
+      // Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
+      // Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
+
+      // Serial.print("[ADXL2 - 0x53] X="); Serial.print(acc2[0] * 0.0039);
+      // Serial.print(" Y="); Serial.print(acc2[1] * 0.0039);
+      // Serial.print(" Z="); Serial.println(acc2[2] * 0.0039);
+
+      // Serial.println("-----------------------------");
+
+      float x_g = acc2[0] * 0.0039;
+      float y_g = acc2[1] * 0.0039;
+      float z_g = acc2[2] * 0.0039;
+
+      char adxl_345_buffer[32];
+      sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
+      appendFile(SD, logFileName, adxl_345_buffer);
+    }
+    isFirst = !isFirst;
 
 
 
@@ -260,7 +354,11 @@ void setup() {
   digitalWrite(LED_PIN, LOW);
 
 
-  Wire.begin();
+  Wire.begin(21, 22);
+  setupADXL(Wire, ADXL1_ADDR);
+
+  I2C_ADXL2.begin(17, 16); // GPIO17 = SDA, GPIO16 = SCL
+  setupADXL(I2C_ADXL2, ADXL2_ADDR);
 
    //SD setup
 	if(!SD.begin(5)){
@@ -280,6 +378,20 @@ void setup() {
   writeFile(SD, logFileName, "Start Log");
   appendFile(SD, logFileName, "\n");
 
+  if (! rtc.begin()) {
+    appendFile(SD, logFileName, "Couldn't find RTC\n");
+  }
+
+    if (rtc.lostPower()) {
+    appendFile(SD, logFileName, "RTC lost power, set the time manually during data analysis!");
+    // When time needs to be set on a new device, or after a power loss, the
+    // following line sets the RTC to the date & time this sketch was compiled
+    // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // This line sets the RTC with an explicit date & time, for example to set
+    // January 21, 2014 at 3am you would call:
+    rtc.adjust(DateTime(1939, 9, 1, 4, 45, 0));
+  }
+
   while(!bme.begin())
   {
     Serial.println("Could not find BME280 sensor!");
@@ -290,6 +402,8 @@ void setup() {
   delay(500);
   digitalWrite(LED_PIN, LOW);
 
+
+  appendFile(SD, logFileName, "Timestamp, Temp, Press, Hum, ACC XY, ACC Z, ACC x, ACC y, ACC z, ACC x 2, ACC y 2, ACC z 2, Vibration \n");
 
   xTaskCreatePinnedToCore(envTask, "Env Task", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(motionTask, "Motion Task", 4096, NULL, 1, NULL, 1);
