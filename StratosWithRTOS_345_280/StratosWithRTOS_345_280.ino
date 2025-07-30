@@ -25,6 +25,19 @@
 //Control Pinout
 #define LED_PIN 4
 
+//On Board Payload Pinout
+#define SOUTH_PAYLOAD_STATS_IN 32
+#define SOUTH_PAYLOAD_STATS_OUT 12
+
+//Thor's board status
+#define NORTH_PAYLOAD_STATS_OUT 13
+
+//Rocket
+#define  GPIO25_0 25
+#define GPIO26_1 26
+#define GPIO27_2 27
+#define GPIO14_3 14
+
 
 //ADXL356 Calibration Global Values
 #define SYS_VOL 3.3
@@ -42,6 +55,16 @@ float cali_data_xy;
 float cali_data_z;
 int16_t scale;
 
+//South Payload
+bool southPayloadStats = LOW;
+
+//Init stats
+bool bmeInit = false;
+bool cardInit = false;
+bool adxl356Init = false;
+bool adxl345Init = false;
+bool rtcInit = false;
+bool piezoInit = false;
 
 //For Mutex
 struct EnvData {
@@ -55,18 +78,23 @@ struct EnvData {
 
 EnvData envData;
 
-RTC_DS3231 rtc
+RTC_DS3231 rtc;
 
-TwoWire I2C_ADXL2 = TwoWire(1);
+//--------------------SPIKE FOR TWO ADXL345 --NOT USING ATM------------------------------
 
+// TwoWire I2C_ADXL2 = TwoWire(1);
 
-#define ADXL1_ADDR 0x1D  // Sensor 1 on Wire
-#define ADXL2_ADDR 0x53  // Sensor 2 on Wire1
+// #define ADXL1_ADDR 0x1D  // Sensor 1 on Wire
+// #define ADXL2_ADDR 0x53  // Sensor 2 on Wire1
+// int8_t acc2_raw[6];
 
-int8_t acc1_raw[6];
-int8_t acc2_raw[6];
+// bool isFirst = true;
 
-bool isFirst = true;
+//---------------------------------------------------------------------------------------
+
+#define ADXL345 0x53
+
+int8_t acc345_raw[6];
 
 //Logging global variables
 File logFile;
@@ -156,6 +184,7 @@ void calibration(void){
   cali_data_z = deal_cali_buf(cali_buf_z);
 
   Serial.println("Calibration OK!!!");
+  adxl356Init = true;
 
   digitalWrite(LED_PIN, HIGH);
   delay(500);
@@ -168,39 +197,56 @@ void calibration(void){
 
 }
 
-//ADXL345
-void setupADXL(TwoWire &bus, uint8_t address) {
-  bus.beginTransmission(address);
-  bus.write(0x2D);  // Power Control
-  bus.write(0x08);  // Measurement mode
-  bus.endTransmission();
+//------------FOR 2 ADXL345------------------
+// void setupADXL(TwoWire &bus, uint8_t address) {
+//   bus.beginTransmission(address);
+//   bus.write(0x2D);  // Power Control
+//   bus.write(0x08);  // Measurement mode
+//   bus.endTransmission();
 
-  bus.beginTransmission(address);
-  bus.write(0x31);  // Data format
-  bus.write(0x0B);  // +-16g
-  bus.endTransmission();
-}
+//   bus.beginTransmission(address);
+//   bus.write(0x31);  // Data format
+//   bus.write(0x0B);  // +-16g
+//   bus.endTransmission();
+// }
+//------------------------------------------
 
-int16_t* readADXL(TwoWire &bus, uint8_t address, int8_t* raw_data) {
+int16_t* readADXL(int8_t * accelerations_raw) {
   static int16_t acc[3];
 
-  bus.beginTransmission(address);
-  bus.write(0x32);  // Data register
-  if (bus.endTransmission(false) == 0) {
-    bus.requestFrom(address, (uint8_t)6);
-    for (int i = 0; i < 6; i++) {
-      raw_data[i] = bus.read();
+  Wire.beginTransmission(ADXL345);
+  Wire.write(0x32);
+  if(!Wire.endTransmission()){
+
+    Wire.requestFrom(ADXL345, 6);
+
+    for (int i = 0; i < 6; i++){
+      accelerations_raw[i] = Wire.end();
     }
 
-    acc[0] = (int16_t)(raw_data[1] << 8 | raw_data[0]);
-    acc[1] = (int16_t)(raw_data[3] << 8 | raw_data[2]);
-    acc[2] = (int16_t)(raw_data[5] << 8 | raw_data[4]);
-  } else {
-    acc[0] = acc[1] = acc[2] = 0;
+    int16_t Xraw = accelerations_raw[0] | accelerations_raw[1] << 8; //move older bits by 8 and OR it with 
+    int16_t Yraw = accelerations_raw[2] | accelerations_raw[3] << 8;
+    int16_t Zraw = accelerations_raw[4] | accelerations_raw[5] << 8;
+    acc[0] = Xraw;
+    acc[1] = Yraw;
+    acc[2] = Zraw;
+
+    if(!adxl345Init){
+      adxl345Init = true;
+    }
+
+    return acc;
+
+  }else{
+
+    Serial.println("ADXL disconnected");
+    for(int i = 0; i < 6; i++){
+      accelerations_raw[i] = -1;
+    }
+
   }
 
-  r
-
+}
 void writeFile(fs::FS &fs, const char * path, const char * message);
 
 //BME280
@@ -216,9 +262,12 @@ void envTask(void *pvParameters){
 
     bme.read(pres, temp, hum, tempUnit, presUnit);
     
-    Serial.print(pres + ", ");
-    Serial.print(temp + ", ");
-    Serial.print(hum + ", ");
+    Serial.print(pres);
+    Serial.print(",");
+    Serial.print(temp);
+    Serial.print(",");
+    Serial.print(hum);
+    Serial.print(",");
 
     if(xSemaphoreTake(dataMutex, portMAX_DELAY)){
       envData.temp = temp;
@@ -234,7 +283,7 @@ void envTask(void *pvParameters){
 void motionTask(void *pvParameters){
   while(1){
 
-  DataTime now = rtc.now();
+  DateTime now = rtc.now();
 
   char timestamp[32];
 
@@ -272,63 +321,67 @@ void motionTask(void *pvParameters){
   appendFile(SD, logFileName, acc_buffer);
 
 
-  //ADXL345
-  // int16_t * fromADXL_ptr;
+  // ADXL345
+  int16_t * fromADXL_ptr;
 
-  // fromADXL_ptr = readADXL(accelerations_raw);
-  // Serial.print(", ");
-  // Serial.print(fromADXL_ptr[0] * 0.031);
-  // Serial.print(", ");
-  // Serial.print(fromADXL_ptr[1] * 0.031);
-  // Serial.print(", ");
-  // Serial.print(fromADXL_ptr[2] * 0.031);
+  fromADXL_ptr = readADXL(acc345_raw);
+  Serial.print(", ");
+  Serial.print(fromADXL_ptr[0] * 0.0031);
+  Serial.print(", ");
+  Serial.print(fromADXL_ptr[1] * 0.0031);
+  Serial.print(", ");
+  Serial.print(fromADXL_ptr[2] * 0.0031);
 
-  // float x_g = fromADXL_ptr[0] * 0.0031;
-  // float y_g = fromADXL_ptr[1] * 0.0031;
-  // float z_g = fromADXL_ptr[2] * 0.0031;
+  float x_g = fromADXL_ptr[0] * 0.0031;
+  float y_g = fromADXL_ptr[1] * 0.0031;
+  float z_g = fromADXL_ptr[2] * 0.0031;
 
-  // char adxl_345_buffer[32];
-  // sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
-  // appendFile(SD, logFileName, adxl_345_buffer);
+  char adxl_345_buffer[32];
+  sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
+  appendFile(SD, logFileName, adxl_345_buffer);
 
-    if(isFirst){
-      int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
-      // int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
 
-      // Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
-      // Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
-      // Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
+//------------------------SPIKE WITH 2 ADXL345--------------------------------------
+    // if(isFirst){
+    //   int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
+    //   // int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
 
-      float x_g = acc1[0] * 0.0039;
-      float y_g = acc1[1] * 0.0039;
-      float z_g = acc1[2] * 0.0039;
+    //   // Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
+    //   // Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
+    //   // Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
 
-      char adxl_345_buffer[32];
-      sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
-      appendFile(SD, logFileName, adxl_345_buffer);
-    }else{
-        // int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
-      int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
+    //   float x_g = acc1[0] * 0.0039;
+    //   float y_g = acc1[1] * 0.0039;
+    //   float z_g = acc1[2] * 0.0039;
 
-      // Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
-      // Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
-      // Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
+    //   char adxl_345_buffer[32];
+    //   sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
+    //   appendFile(SD, logFileName, adxl_345_buffer);
+    // }else{
+    //     // int16_t* acc1 = readADXL(Wire, ADXL1_ADDR, acc1_raw);
+    //   int16_t* acc2 = readADXL(I2C_ADXL2, ADXL2_ADDR, acc2_raw);
 
-      // Serial.print("[ADXL2 - 0x53] X="); Serial.print(acc2[0] * 0.0039);
-      // Serial.print(" Y="); Serial.print(acc2[1] * 0.0039);
-      // Serial.print(" Z="); Serial.println(acc2[2] * 0.0039);
+    //   // Serial.print("[ADXL1 - 0x1D] X="); Serial.print(acc1[0] * 0.0039);
+    //   // Serial.print(" Y="); Serial.print(acc1[1] * 0.0039);
+    //   // Serial.print(" Z="); Serial.println(acc1[2] * 0.0039);
 
-      // Serial.println("-----------------------------");
+    //   // Serial.print("[ADXL2 - 0x53] X="); Serial.print(acc2[0] * 0.0039);
+    //   // Serial.print(" Y="); Serial.print(acc2[1] * 0.0039);
+    //   // Serial.print(" Z="); Serial.println(acc2[2] * 0.0039);
 
-      float x_g = acc2[0] * 0.0039;
-      float y_g = acc2[1] * 0.0039;
-      float z_g = acc2[2] * 0.0039;
+    //   // Serial.println("-----------------------------");
 
-      char adxl_345_buffer[32];
-      sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
-      appendFile(SD, logFileName, adxl_345_buffer);
-    }
-    isFirst = !isFirst;
+    //   float x_g = acc2[0] * 0.0039;
+    //   float y_g = acc2[1] * 0.0039;
+    //   float z_g = acc2[2] * 0.0039;
+
+    //   char adxl_345_buffer[32];
+    //   sprintf(adxl_345_buffer, ",%.2f, %.2f, %.2f",x_g, y_g, z_g);
+    //   appendFile(SD, logFileName, adxl_345_buffer);
+    // }
+    // isFirst = !isFirst;
+
+    //---------------------------------------------------------------------------
 
 
 
@@ -337,7 +390,7 @@ void motionTask(void *pvParameters){
   Serial.println(", ");
   Serial.println(vib);
   char vib_buffer[32];
-  sprintf(vib_buffer, ",%d\n",vib);
+  sprintf(vib_buffer, ", %d,",vib);
   appendFile(SD, logFileName, vib_buffer);
 
 
@@ -348,17 +401,12 @@ void motionTask(void *pvParameters){
 
 void setup() {
     Serial.begin(115200);
-  pinMode(LED_PIN, OUTPUT);
 
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
 
-  Wire.begin(21, 22);
-  setupADXL(Wire, ADXL1_ADDR);
-
-  I2C_ADXL2.begin(17, 16); // GPIO17 = SDA, GPIO16 = SCL
-  setupADXL(I2C_ADXL2, ADXL2_ADDR);
+  Wire.begin();
 
    //SD setup
 	if(!SD.begin(5)){
@@ -369,21 +417,26 @@ void setup() {
     delay(1000);
     digitalWrite(LED_PIN, LOW);
     delay(500);
+    cardInit = true;
   }
   int fileCount = countFiles(SD, "/"); 
 
-  sprintf(logFileName, "/balon_%d.txt", fileCount);
+  sprintf(logFileName, "/lot_%d.txt", fileCount);
 
 
   writeFile(SD, logFileName, "Start Log");
   appendFile(SD, logFileName, "\n");
+  delay(50);
+
+  appendFile(SD, logFileName, "Go/No-Go Poll.....................................\n");
+  appendFile(SD, logFileName, "RTC..........................................");
 
   if (! rtc.begin()) {
-    appendFile(SD, logFileName, "Couldn't find RTC\n");
+    appendFile(SD, logFileName, "ERROR\n");
   }
 
     if (rtc.lostPower()) {
-    appendFile(SD, logFileName, "RTC lost power, set the time manually during data analysis!");
+    appendFile(SD, logFileName, "RTC lost power, set the time manually during data analysis!\n");
     // When time needs to be set on a new device, or after a power loss, the
     // following line sets the RTC to the date & time this sketch was compiled
     // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -391,19 +444,114 @@ void setup() {
     // January 21, 2014 at 3am you would call:
     rtc.adjust(DateTime(1939, 9, 1, 4, 45, 0));
   }
-
+  rtcInit = true;
+  appendFile(SD, logFileName, "READY\n");
+  appendFile(SD, logFileName, "BME..........................................");
+  
+  int bme_checking_iter = 0;
   while(!bme.begin())
   {
-    Serial.println("Could not find BME280 sensor!");
-    delay(500);
+    if(bme_checking_iter <= 10){
+      Serial.println("Could not find BME280 sensor!");
+      appendFile(SD, logFileName, "READY\n");
+      appendFile(SD, logFileName, "BME..........................................");
+      delay(500);
+    }else{
+      bmeInit = true;
+      break;
+    }
+    bme_checking_iter ++;
   }
   //BME Onboarding
   digitalWrite(LED_PIN, HIGH);
   delay(500);
   digitalWrite(LED_PIN, LOW);
 
+  appendFile(SD, logFileName, "READY\n");
+  appendFile(SD, logFileName, "356..........................................");
 
-  appendFile(SD, logFileName, "Timestamp, Temp, Press, Hum, ACC XY, ACC Z, ACC x, ACC y, ACC z, ACC x 2, ACC y 2, ACC z 2, Vibration \n");
+  delay(100);
+  analogReadResolution(12);
+  calibration();
+  delay(1700);
+
+  appendFile(SD, logFileName, "READY\n");
+
+  appendFile(SD, logFileName, "345..........................................");
+  //ADXL setup
+  Serial.print("SETUP");
+  Wire.beginTransmission(ADXL345);
+  Wire.write(0x32);
+  Wire.write(0x0B);
+  Wire.endTransmission();
+
+  Wire.beginTransmission(ADXL345);
+  Wire.write(0x2D);
+  Wire.write(0x08);
+  Wire.endTransmission();
+
+  int16_t * fromADXL_ptr;
+
+  fromADXL_ptr = readADXL(acc345_raw);
+
+  if(adxl345Init){
+    appendFile(SD, logFileName, "READY\n");
+  }else{
+    appendFile(SD, logFileName, "NINFO\n");
+  }
+
+  appendFile(SD, logFileName, "PIEZO........................................");
+  
+  int vib = analogRead(piezoPin);
+  if(vib < 0){
+    appendFile(SD, logFileName, "ERROR\n");
+  }else{
+    appendFile(SD, logFileName, "READY\n");
+    piezoInit = true;
+  }
+
+  
+  //ROCKET Communication
+  pinMode(GPIO25_0, INPUT);
+  pinMode(GPIO26_1, INPUT);
+  pinMode(GPIO27_2, INPUT);
+  pinMode(GPIO14_3, INPUT);
+
+  //Thor's validation
+  pinMode(NORTH_PAYLOAD_STATS_OUT, OUTPUT);
+
+  //SOUTH Payload Communication
+  pinMode(SOUTH_PAYLOAD_STATS_IN, INPUT);
+  pinMode(SOUTH_PAYLOAD_STATS_OUT, OUTPUT);
+
+  int south_check_iter = 0;
+  while(south_check_iter < 50){
+
+    southPayloadStats = digitalRead(SOUTH_PAYLOAD_STATS_IN);
+
+    appendFile(SD, logFileName, "CONNECTION.EXP.2.............................");
+  
+    if(southPayloadStats == HIGH){
+      digitalWrite(LED_PIN, HIGH);
+      delay(500);
+      digitalWrite(LED_PIN, LOW);
+      digitalWrite(SOUTH_PAYLOAD_STATS_OUT, HIGH);
+      appendFile(SD, logFileName, "OK\n");
+      break;
+    }
+    
+    char iter_buffer[32];
+    sprintf(iter_buffer, " %d/n",south_check_iter);
+    appendFile(SD, logFileName, iter_buffer);
+
+    delay(100);
+    south_check_iter++;
+  }
+
+
+  appendFile(SD, logFileName, "Timestamp, Temp, Press, Hum, ACC XY, ACC Z, ACC x, ACC y, ACC z, Vibration, GPIO25, GPIO26, GPIO27, GPIO14 \n");
+
+  Serial.println("Check SD Card for logs!");
 
   xTaskCreatePinnedToCore(envTask, "Env Task", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(motionTask, "Motion Task", 4096, NULL, 1, NULL, 1);
