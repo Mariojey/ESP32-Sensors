@@ -3,6 +3,12 @@
 # Project Technical Documentation
 
 ## Table of Content
+1. [Development Environment](#development-environment)
+2. [Sensors](#sensors)
+    1. [UV](#uv-sensor---ltr390)
+    2. [Temp, Hum, Pres](#temperature-humidity-and-pressure-sensor-bme688)
+    3. [Temp, Hum, Pres](#temperature-humidity-and-pressure-sensor-bme280)
+3. [Data Storage](#data-storage)
 
 ## Development Environment
 
@@ -357,6 +363,11 @@ int countFiles(fs::FS &fs, const char *dirname) {
 
 
 ```
+
+## Sensor Manufacturers Copyrights
+
+ * Copyright (C) 2021 Bosch Sensortec GmbH
+ * SPDX-License-Identifier: BSD-3-Clause
 
 
 
