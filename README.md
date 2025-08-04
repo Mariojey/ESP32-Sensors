@@ -33,6 +33,10 @@
 >**Required Libraries to Install:**<br /> 
 >*DFRobot_LTR390UV*
 
+***You need to locate the main Sketchbook directory. To do this, open the Arduino IDE, go to File → Preferences, and copy the path to the Sketchbook.
+Next, download the sensor library from the provided [link](https://github.com/DFRobot/DFRobot_LTR390UV) and extract the DFRobot_LTR390UV-master folder into the libraries directory located inside your Sketchbook folder.
+To ensure that the library was added correctly, restart the IDE and go to File → Sketchbook — the library should appear in the dropdown list.***
+
 **You must switch the sensor to I2C mode (there is an I2C/UART selector switch on the sensor).**
 
 **Pinout:**
@@ -83,6 +87,9 @@ void loop() {
 
 >**Required Libraries to Install:**<br /> 
 >*BME68x Sensor library*
+
+***This library can be installed directly via the Library Manager.
+Find the Library Manager on the left sidebar of Arduino IDE, enter the name of the library, and install it.***
 
 **Pinout:**
 <br />
@@ -155,10 +162,12 @@ void loop() {
 
 ### Temperature, Humidity, and Pressure Sensor BME280
 
-*You must switch the sensor to I2C mode (there is an I2C/UART selector switch on the sensor).*
-
 >**Required Libraries to Install:**<br /> 
 >*BME280I2C*
+
+
+***This library can be installed directly via the Library Manager.
+Find the Library Manager on the left sidebar of Arduino IDE, enter the name of the library, and install it.***
 
 **Pinout:**
 <br />
