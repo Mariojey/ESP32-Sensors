@@ -167,9 +167,9 @@ float deal_cali_buf(float *buf){
 
 void calibration(void){
 
-  Serial.println("Please Place the module horizontally!");
+  // Serial.println("Please Place the module horizontally!");
   delay(200);
-  Serial.println("Calibration....");
+  // Serial.println("Calibration....");
 
   for(int i = 0; i < CALI_BUF_LEN; i++){
 
@@ -182,7 +182,7 @@ void calibration(void){
   cali_data_xy = deal_cali_buf(cali_buf_xy);
   cali_data_z = deal_cali_buf(cali_buf_z);
 
-  Serial.println("Calibration OK!!!");
+  // Serial.println("Calibration OK!!!");
   adxl356Init = true;
 
   digitalWrite(LED_PIN, HIGH);
@@ -238,7 +238,7 @@ int16_t* readADXL(int8_t * accelerations_raw) {
 
   }else{
 
-    Serial.println("ADXL disconnected");
+    // Serial.println("ADXL disconnected");
     for(int i = 0; i < 6; i++){
       accelerations_raw[i] = -1;
     }
@@ -261,12 +261,12 @@ void envTask(void *pvParameters){
 
     bme.read(pres, temp, hum, tempUnit, presUnit);
     
-    Serial.print(pres);
-    Serial.print(",");
-    Serial.print(temp);
-    Serial.print(",");
-    Serial.print(hum);
-    Serial.print(",");
+    // Serial.print(pres);
+    // Serial.print(",");
+    // Serial.print(temp);
+    // Serial.print(",");
+    // Serial.print(hum);
+    // Serial.print(",");
 
     if(xSemaphoreTake(dataMutex, portMAX_DELAY)){
       envData.temp = temp;
@@ -309,10 +309,10 @@ void motionTask(void *pvParameters){
   val_xy -= cali_data_xy;
   val_z -= cali_data_z;
   
-  Serial.print(",");
-  Serial.print(val_xy* scale / 1000.0);
-  Serial.print(",");
-  Serial.print(val_z * scale / 1000.0);
+  // Serial.print(",");
+  // Serial.print(val_xy* scale / 1000.0);
+  // Serial.print(",");
+  // Serial.print(val_z * scale / 1000.0);
 
   char acc_buffer[32];
 
@@ -324,12 +324,12 @@ void motionTask(void *pvParameters){
   int16_t * fromADXL_ptr;
 
   fromADXL_ptr = readADXL(acc345_raw);
-  Serial.print(", ");
-  Serial.print(fromADXL_ptr[0] * 0.0031);
-  Serial.print(", ");
-  Serial.print(fromADXL_ptr[1] * 0.0031);
-  Serial.print(", ");
-  Serial.print(fromADXL_ptr[2] * 0.0031);
+  // Serial.print(", ");
+  // Serial.print(fromADXL_ptr[0] * 0.0031);
+  // Serial.print(", ");
+  // Serial.print(fromADXL_ptr[1] * 0.0031);
+  // Serial.print(", ");
+  // Serial.print(fromADXL_ptr[2] * 0.0031);
 
   float x_g = fromADXL_ptr[0] * 0.0031;
   float y_g = fromADXL_ptr[1] * 0.0031;
@@ -386,8 +386,8 @@ void motionTask(void *pvParameters){
 
   //Piezo
   int vib = analogRead(piezoPin);
-  Serial.println(", ");
-  Serial.println(vib);
+  // Serial.println(", ");
+  // Serial.println(vib);
   char vib_buffer[32];
   sprintf(vib_buffer, ", %d,",vib);
   appendFile(SD, logFileName, vib_buffer);
@@ -401,14 +401,14 @@ void motionTask(void *pvParameters){
 void setup() {
   
   Wire.begin();
-  Serial.begin(115200);
-  Serial.println("hello world!");
+  // Serial.begin(115200);
+  // Serial.println("hello world!");
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
    //SD setup
 	if(!SD.begin(D10)){
-    Serial.println("Card Mount Failed");
+    // Serial.println("Card Mount Failed");
     digitalWrite(LED_PIN, HIGH);
     delay(3000);
     digitalWrite(LED_PIN, LOW);
@@ -454,7 +454,7 @@ void setup() {
   while(!bme.begin())
   {
     if(bme_checking_iter <= 10){
-      Serial.println("Could not find BME280 sensor!");
+      // Serial.println("Could not find BME280 sensor!");
       appendFile(SD, logFileName, "BME..........................................");
       delay(500);
     }else{
@@ -480,7 +480,7 @@ void setup() {
 
   appendFile(SD, logFileName, "345..........................................");
   //ADXL setup
-  Serial.print("SETUP");
+  // Serial.print("SETUP");
   Wire.beginTransmission(ADXL345);
   Wire.write(0x32);
   Wire.write(0x0B);
@@ -557,7 +557,7 @@ void setup() {
 
   appendFile(SD, logFileName, "Timestamp, Temp, Press, Hum, ACC XY, ACC Z, ACC x, ACC y, ACC z, Vibration, GPIO10, GPIO9, GPIO8, GPIO7 \n");
 
-  Serial.println("Check SD Card for logs!");
+  // Serial.println("Check SD Card for logs!");
 
   xTaskCreatePinnedToCore(envTask, "Env Task", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(motionTask, "Motion Task", 4096, NULL, 1, NULL, 1);
